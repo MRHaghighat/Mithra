@@ -45,7 +45,6 @@ Thumbs.db
 # Project-specific outputs
 checkpoints/
 outputs/
-screenshots/
 
 # Temporary files
 *.tmp
