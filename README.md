@@ -4,43 +4,6 @@
 
 ---
 
-## Screenshots
-
-### Trial Setup
-> Select a disease area — drugs, genes, and RL hyperparameters auto-populate from the PharmaGKB knowledge base.
-
-![Trial Setup](screenshots/trial_setup.png)
-
----
-
-### Patient Input
-> Smart patient entry with metabolizer-status dropdowns, synthetic templates, and instant clinical risk badges.
-
-![Patient Input](screenshots/patient_input.png)
-
----
-
-### Train Agent
-> Live reward curve, loss curve, epsilon schedule, and arm distribution — plus a latency benchmark table comparing full, quantized, and pruned models.
-
-![Train Agent](screenshots/train_agent.png)
-
----
-
-### Patient Report
-> GPT-4o-mini streams pharmacogenomic reasoning in real time. RL recommendation shown with confidence % and Bootstrap head vote breakdown. Export to PDF or JSON.
-
-![Patient Report](screenshots/patient_report.png)
-
----
-
-### Analytics
-> Trial-level dashboard: cumulative reward, arm distribution, BDQL++ vs random assignment comparison, and full patient cohort table.
-
-![Analytics](screenshots/analytics.png)
-
----
-
 ## What This Is
 
 Mithra is a production-grade clinical decision support system (DSS) that helps clinicians assign patients to the optimal treatment arm in a pharmacogenomics-guided clinical trial.
@@ -50,7 +13,7 @@ It demonstrates three professional AI capabilities in a single, cohesive applica
 | Capability | Implementation |
 |---|---|
 | **Deep Learning Model — Designed & Trained for Production** | Bootstrapped DQN (BDQL++) trained from scratch; live convergence charts; saved checkpoints |
-| **Deep Expertise in LLM Architecture** | GPT-4o-mini + RAG over PharmaGKB; ReAct reasoning trace; structured Pydantic output; token budget management |
+| **Deep Expertise in LLM Architecture** | GPT-4o-mini + RAG over PharmaGKB via FAISS; React reasoning trace; structured Pydantic output; token budget management |
 | **Model Optimisation for Resource-Constrained Environments** | float32→int8 weight quantization; Bootstrap head pruning (K→1); latency benchmarking table |
 
 ---
@@ -95,7 +58,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> First install takes 2–4 minutes.
+> First install takes 2–4 minutes. FAISS and sentence-transformers are the largest packages.
 
 ### 4. Place data files
 
@@ -110,17 +73,7 @@ mithra/
     └── relationships.tsv
 ```
 
-### 5. Add your OpenAI API key
-
-```bash
-# Windows
-set OPENAI_API_KEY=sk-...
-
-# macOS / Linux
-export OPENAI_API_KEY=sk-...
-```
-
-### 6. Run the application
+### 5. Run the application
 
 ```bash
 streamlit run app.py
@@ -182,8 +135,6 @@ All drug-gene associations are sourced from PharmaGKB and verified against CPIC 
 
 ## Architecture Overview
 
-Mithra is structured as three independent vertical pipelines that share a single knowledge base and converge at the clinical report layer.
-
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    MITHRA APPLICATION                           │
@@ -193,10 +144,10 @@ Mithra is structured as three independent vertical pipelines that share a single
 │  Patient Input   │  Gene Profile        │  float32 Weights      │
 │       ↓          │  Encoded as State    │       ↓               │
 │  RAG Retrieval   │       ↓              │  int8 Quantization    │
-│  PharmaGKB       │  Shared Encoder      │  4× compression       │
+│  PharmaGKB FAISS │  Shared Encoder      │  4× compression       │
 │       ↓          │  (MLP backbone)      │       ↓               │
 │  GPT-4o-mini     │       ↓              │  Head Pruning         │
-│  ReAct Reasoning │  K Bootstrap Heads   │  K heads → 1 head     │
+│  React Reasoning │  K Bootstrap Heads   │  K heads → 1 head     │
 │       ↓          │  Bernoulli Masks     │       ↓               │
 │  Pydantic Parser │       ↓              │  Latency Benchmark    │
 │  ADME Structure  │  Ensemble Vote       │  <1ms inference       │
@@ -208,134 +159,6 @@ Mithra is structured as three independent vertical pipelines that share a single
                   127,000+ Relationships
                   3,700+ Drugs · 25,000+ Genes
 ```
-
-### Why three independent pipelines?
-
-Each pipeline addresses a distinct failure mode. The LLM pipeline can fail at retrieval
-or generation — that failure is isolated and does not affect the RL arm assignment. The
-optimisation pipeline is a post-training concern that touches only weights, not logic.
-This separation means each component can be tested, replaced, or scaled independently,
-which is the correct property for any system that will eventually integrate with a
-real clinical EHR.
-
-### Data flow through the system
-
-A single patient interaction triggers three concurrent processes:
-
-1. **State encoding** — the patient's gene metabolizer statuses are one-hot encoded
-   into a fixed-length state vector and passed to the BDQL++ agent for arm selection.
-2. **RAG retrieval** — the same gene/drug profile is used to query the PharmaGKB
-   knowledge base, selecting the most relevant drug-gene relationships for the LLM context.
-3. **Report assembly** — the RL recommendation and LLM narrative are merged by
-   `core/report.py` into a structured clinical output with a full audit trail.
-
-The PharmaGKB knowledge base is the single source of truth for both pipelines,
-ensuring the RL agent and the LLM are reasoning from the same evidence.
-
----
-
-## Model Optimisation — Deep Dive
-
-The optimisation pipeline (`Page 3 — Train Agent`) demonstrates three distinct
-techniques relevant to deploying ML models in resource-constrained clinical environments
-such as edge servers, hospital on-premise infrastructure, or point-of-care devices.
-
-### 1. float32 → int8 Weight Quantization
-
-After training, every weight matrix in the shared MLP encoder and all Bootstrap heads
-is quantized from 32-bit floats to 8-bit integers using symmetric linear quantization:
-
-```
-scale = max(|W|) / 127
-W_int8 = round(W / scale)
-```
-
-This produces approximately **4× model size reduction** with negligible accuracy loss
-on the BDQL++ task because the reward signal is coarse (discrete arm labels) and the
-weight distributions are well-behaved after training. At inference, weights are
-dequantized on the fly — the forward pass remains numerically stable at float32
-precision while the stored model footprint is dramatically smaller.
-
-**Why this matters clinically:** many hospital systems run inference on CPU-only
-servers with strict storage quotas. A 4× reduction can be the difference between
-a model that fits within an IT-approved deployment envelope and one that does not.
-
-### 2. Bootstrap Head Pruning (K → 1)
-
-The BDQL++ agent trains with K Bootstrap heads, each with independent Bernoulli
-masks applied to the shared encoder output. At deployment time, the K heads are
-pruned to a single head — the one with the highest cumulative validation reward.
-
-This reduces inference cost from O(K) to O(1) forward passes while retaining the
-exploration benefits that Bootstrap heads provided during training. The pruned
-single-head model is what gets quantized and benchmarked in the latency table.
-
-**Exploration vs exploitation trade-off:** K heads are necessary during training
-because disagreement between heads drives Thompson Sampling — uncertain states
-get explored more. After training converges, that uncertainty signal is no longer
-needed; the best head is a sufficient policy for deployment.
-
-### 3. Latency Benchmarking
-
-The benchmark table on Page 3 reports wall-clock inference latency (mean ± std
-over 1,000 forward passes) for three model variants:
-
-| Model | Weights | Heads | Expected Latency |
-|---|---|---|---|
-| Full (float32, K heads) | float32 | K | baseline |
-| Quantized (int8, K heads) | int8 | K | ~40–60% reduction |
-| Pruned + Quantized (int8, 1 head) | int8 | 1 | <1ms on CPU |
-
-This table is the kind of output a clinical engineering team would require before
-approving a model for deployment — concrete numbers, not just theoretical claims.
-
----
-
-## Key Technical Decisions
-
-### Why NumPy for the RL agent (not PyTorch)?
-
-The agent is intentionally implemented in pure NumPy to demonstrate understanding
-of the mathematics, not just the framework. Every gradient step, every Adam update,
-every Huber loss computation is explicit and auditable. For a clinical system,
-auditability is not optional — a regulator or clinical team asking "how does it
-decide?" deserves a transparent answer, not a black-box framework call.
-
-It also runs in ~90 seconds on CPU with no GPU required, which is the correct
-deployment profile for most hospital infrastructure.
-
-### Why RAG instead of a large context window?
-
-PharmaGKB contains 127,000+ drug-gene relationships. Stuffing them all into
-context is impossible and expensive. RAG retrieves only what is relevant to the
-specific patient's genes and drugs — this is the correct production architecture.
-It also means token costs scale with patient complexity, not with database size,
-which is the right economic property for a deployed system.
-
-### Why Bootstrap heads instead of ε-greedy exploration only?
-
-Bootstrap heads implement Thompson Sampling naturally — each head develops an
-independent value estimate over the shared encoder, and disagreement between
-heads signals genuine uncertainty about a treatment arm. This is more principled
-than ε-greedy for a clinical trial context, where random exploration has a direct
-cost (a patient assigned to a suboptimal arm). Thompson Sampling concentrates
-exploration on genuinely uncertain arms rather than exploring uniformly at random.
-
-### Why Pydantic for LLM output parsing?
-
-GPT-4o-mini output is parsed into a typed Pydantic schema before it reaches the
-report layer. This means a malformed LLM response fails loudly at the boundary,
-not silently inside the report generator. It also makes the ADME breakdown
-(Absorption, Distribution, Metabolism, Excretion) programmatically addressable —
-each field can be rendered, audited, or exported independently.
-
-### Why disease-agnostic configuration?
-
-`config.py` defines disease areas, drugs, genes, and reward shaping as pure data
-— the RL environment and LLM pipeline consume this configuration at runtime.
-Adding a new disease area requires no code changes, only a new config block.
-This is the correct architecture for a system intended to expand beyond its
-initial MDD demo — and it is what makes Mithra commercially extensible.
 
 ---
 
@@ -378,11 +201,22 @@ mithra/
 
 ---
 
+## Key Technical Decisions
+
+**Why NumPy for the RL agent (not TensorFlow/PyTorch)?**
+The agent is intentionally implemented in pure NumPy to demonstrate that you understand the mathematics, not just the framework. Every gradient step, every Adam update, every Huber loss computation is transparent and auditable. It runs in ~90 seconds on CPU — no GPU required for clinical deployment.
+
+**Why RAG instead of a large context window?**
+PharmaGKB has 127,000+ relationships. Stuffing them all into context is impossible and expensive. RAG retrieves only what is relevant to the specific patient's genes and drugs — this is the correct production architecture, and it keeps token costs low.
+
+**Why Bootstrap heads instead of ε-greedy only?**
+Bootstrap heads implement Thompson Sampling naturally — each head develops a different value estimate, and disagreement between heads signals genuine uncertainty. This is the correct exploration strategy for clinical trials where you must be confident before committing to a treatment arm.
+
+---
+
 ## Disclaimer
 
-Mithra is a research and demonstration system. It is not a certified medical device.
-All recommendations require review by a qualified clinical pharmacogenomics specialist
-before any clinical action is taken.
+Mithra is a research and demonstration system. It is not a certified medical device. All recommendations require review by a qualified clinical pharmacogenomics specialist before any clinical action is taken.
 
 ---
 

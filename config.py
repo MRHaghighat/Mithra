@@ -1,16 +1,8 @@
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY not set. Please add it to your .env file.")
-
+OPENAI_API_KEY = "openai_api_key"
 OPENAI_MODEL   = "gpt-4o-mini"
 DATA_DIR       = "data"
 
-# ── Metabolizer phenotype labels per gene ────────────────────────────────────
+#  Metabolizer phenotype labels per gene 
 GENE_PHENOTYPES = {
     "CYP2C19": ["Poor Metabolizer", "Intermediate Metabolizer", "Normal Metabolizer",
                 "Rapid Metabolizer", "Ultrarapid Metabolizer"],
@@ -46,7 +38,7 @@ GENE_DEFAULT_PHENOTYPE = {
     "G6PD":    "Normal Activity",
 }
 
-# ── Disease areas with drugs and genes — all verified in PharmaGKB data ──────
+#  Disease areas with drugs and genes — all verified in PharmaGKB data 
 DISEASE_CONFIG = {
     "Major Depressive Disorder": {
         "description": "Pharmacogenomics-guided antidepressant selection based on CYP2C19 and CYP2D6 metabolizer status.",
@@ -129,7 +121,7 @@ DISEASE_CONFIG = {
     },
 }
 
-# ── RL hyperparameters (tuned for CPU, fast convergence) ────────────────────
+#  RL hyperparameters (tuned for CPU, fast convergence) 
 RL_CONFIG = {
     "hidden_size":        128,
     "num_heads":          4,
@@ -144,7 +136,7 @@ RL_CONFIG = {
     "min_observations":   200,
 }
 
-# ── Synthetic patient templates per disease ──────────────────────────────────
+#  Synthetic patient templates per disease 
 SYNTHETIC_PATIENTS = {
     "Major Depressive Disorder": [
         {"name": "Patient A — CYP2C19 Poor Metabolizer",
