@@ -9,35 +9,35 @@
 ### Trial Setup
 > Select a disease area — drugs, genes, and RL hyperparameters auto-populate from the PharmaGKB knowledge base.
 
-![Trial Setup](screenshots/trial_setup.png)
+![Trial Setup](Screenshots/trial_setup.png)
 
 ---
 
 ### Patient Input
 > Smart patient entry with metabolizer-status dropdowns, synthetic templates, and instant clinical risk badges.
 
-![Patient Input](screenshots/patient_input.png)
+![Patient Input](Screenshots/patient_input.png)
 
 ---
 
 ### Train Agent
 > Live reward curve, loss curve, epsilon schedule, and arm distribution — plus a latency benchmark table comparing full, quantized, and pruned models.
 
-![Train Agent](screenshots/train_agent.png)
+![Train Agent](Screenshots/train_agent.png)
 
 ---
 
 ### Patient Report
 > GPT-4o-mini streams pharmacogenomic reasoning in real time. RL recommendation shown with confidence % and Bootstrap head vote breakdown. Export to PDF or JSON.
 
-![Patient Report](screenshots/patient_report.png)
+![Patient Report](Screenshots/patient_report.png)
 
 ---
 
 ### Analytics
 > Trial-level dashboard: cumulative reward, arm distribution, BDQL++ vs random assignment comparison, and full patient cohort table.
 
-![Analytics](screenshots/analytics.png)
+![Analytics](Screenshots/analytics.png)
 
 ---
 
