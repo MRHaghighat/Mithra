@@ -1,1 +1,0 @@
-# Mithra core package
